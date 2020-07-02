@@ -309,6 +309,7 @@ Material:
     - _CoatIOR: 0.5
     - _CullMode: 0
     - _Cutoff: 0.5
+    - _DecalLayerMask: 1
     - _DepthOffsetEnable: 0
     - _DetailAlbedoScale: 1
     - _DetailAlbedoScale0: 1
@@ -509,7 +510,6 @@ Material:
     - _SubsurfaceRadius1: 1
     - _SubsurfaceRadius2: 1
     - _SubsurfaceRadius3: 1
-    - _SupportDecals: 1
     - _SurfaceType: 1
     - _TexWorldScale: 1
     - _TexWorldScale0: 1
@@ -600,4 +600,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: da692e001514ec24dbc4cca1949ff7e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  version: 6
+  version: 7

@@ -354,6 +354,7 @@ Material:
     - _Cutoff: 0.5
     - _DebugEnable: 1
     - _DebugShow: 1
+    - _DecalLayerMask: 1
     - _DepthOffsetEnable: 0
     - _DetailAlbedoScale: 1
     - _DetailMaskMapChannel: 0
@@ -576,7 +577,6 @@ Material:
     - _SubsurfaceMaskMapUVLocal: 0
     - _SubsurfaceMaskUseMap: 0
     - _SupportDBuffer: 1
-    - _SupportDecals: 1
     - _SurfaceType: 0
     - _TangentMapObjSpace: 0
     - _TangentMapSamplerSharingOptout: 0
@@ -714,4 +714,4 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: da692e001514ec24dbc4cca1949ff7e8, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  version: 6
+  version: 7
