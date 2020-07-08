@@ -30,6 +30,7 @@ namespace UnityEditor.Rendering.Universal
         ShaderKeyword m_CascadeShadows = new ShaderKeyword(ShaderKeywordStrings.MainLightShadowCascades);
         ShaderKeyword m_SoftShadows = new ShaderKeyword(ShaderKeywordStrings.SoftShadows);
         ShaderKeyword m_MixedLightingSubtractive = new ShaderKeyword(ShaderKeywordStrings.MixedLightingSubtractive);
+        ShaderKeyword m_MixedLightingShadowmask = new ShaderKeyword(ShaderKeywordStrings.MixedLightingShadowmask);
         ShaderKeyword m_Lightmap = new ShaderKeyword("LIGHTMAP_ON");
         ShaderKeyword m_DirectionalLightmap = new ShaderKeyword("DIRLIGHTMAP_COMBINED");
         ShaderKeyword m_AlphaTestOn = new ShaderKeyword("_ALPHATEST_ON");
@@ -104,6 +105,10 @@ namespace UnityEditor.Rendering.Universal
             if (compilerData.shaderKeywordSet.IsEnabled(m_MixedLightingSubtractive) &&
                 !CoreUtils.HasFlag(features, ShaderFeatures.MixedLighting))
                 return true;
+
+            if (compilerData.shaderKeywordSet.IsEnabled(m_MixedLightingShadowmask) &&
+                !CoreUtils.HasFlag(features, ShaderFeatures.MixedLighting))
+                return true;    
 
             bool isBuiltInTerrainLit = shader.name.Contains("Universal Render Pipeline/Terrain/Lit");
             if (isBuiltInTerrainLit && compilerData.shaderKeywordSet.IsEnabled(m_AlphaTestOn) &&

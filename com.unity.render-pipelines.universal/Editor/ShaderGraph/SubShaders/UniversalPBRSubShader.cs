@@ -94,6 +94,7 @@ namespace UnityEditor.Rendering.Universal
                 s_AdditionalLightShadowsKeyword,
                 s_ShadowsSoftKeyword,
                 s_MixedLightingSubtractiveKeyword,
+                s_MixedLightingShadowmaskKeyword,
             },
         };
 
@@ -372,6 +373,15 @@ namespace UnityEditor.Rendering.Universal
         {
             displayName = "Mixed Lighting Subtractive",
             referenceName = "_MIXED_LIGHTING_SUBTRACTIVE",
+            type = KeywordType.Boolean,
+            definition = KeywordDefinition.MultiCompile,
+            scope = KeywordScope.Global,
+        };
+
+        static KeywordDescriptor s_MixedLightingShadowmaskKeyword = new KeywordDescriptor()
+        {
+            displayName = "Mixed Lighting Shadowmask",
+            referenceName = "_MIXED_LIGHTING_SHADOWMASK",
             type = KeywordType.Boolean,
             definition = KeywordDefinition.MultiCompile,
             scope = KeywordScope.Global,

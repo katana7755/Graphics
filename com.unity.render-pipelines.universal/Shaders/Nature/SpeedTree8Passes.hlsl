@@ -291,6 +291,11 @@ void InitializeInputData(SpeedTreeFragmentInput input, half3 normalTS, out Input
     inputData.fogCoord = input.interpolated.fogFactorAndVertexLight.x;
     inputData.vertexLighting = input.interpolated.fogFactorAndVertexLight.yzw;
     inputData.bakedGI = half3(0, 0, 0); // No GI currently.
+
+    // [JHLEE]
+#if defined(LIGHTMAP_ON) && defined(_MIXED_LIGHTING_SHADOWMASK)
+    inputData.shadowmask = half4(1, 1, 1, 1); // No ShadowMask
+#endif
 }
 
 half4 SpeedTree8Frag(SpeedTreeFragmentInput input) : SV_Target
