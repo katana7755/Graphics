@@ -51,6 +51,7 @@ float4 _ScaledScreenParams;
 
 float4 _MainLightPosition;
 half4 _MainLightColor;
+half4 _MainLightOcclusionProbes;
 
 half4 _AdditionalLightsCount;
 #if USE_STRUCTURED_BUFFER_FOR_LIGHT_DATA

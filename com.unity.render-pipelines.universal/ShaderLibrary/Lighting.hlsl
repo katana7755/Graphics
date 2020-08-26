@@ -43,6 +43,7 @@ struct Light
     half3   color;
     half    distanceAttenuation;
     half    shadowAttenuation;
+    int     probeChannel;
 };
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -101,7 +102,10 @@ Light GetMainLight()
     light.direction = _MainLightPosition.xyz;
     // unity_LightData.z is 1 when not culled by the culling mask, otherwise 0.
     light.distanceAttenuation = unity_LightData.z;
-#if defined(LIGHTMAP_ON) || defined(SUBTRACTIVE) || defined(_MIXED_LIGHTING_SHADOWMASK)
+    light.probeChannel = -1;
+#if defined(LIGHTMAP_ON) || defined(_MIXED_LIGHTING_SUBTRACTIVE) || defined(_MIXED_LIGHTING_SHADOWMASK)
+    light.probeChannel = _MainLightOcclusionProbes.x;
+
     // unity_ProbesOcclusion.x is the mixed light probe occlusion data
     light.distanceAttenuation *= unity_ProbesOcclusion.x;
 #endif
@@ -147,6 +151,7 @@ Light GetAdditionalPerObjectLight(int perObjectLightIndex, float3 positionWS)
     Light light;
     light.direction = lightDirection;
     light.distanceAttenuation = attenuation;
+    light.probeChannel = -1;
     light.shadowAttenuation = AdditionalLightRealtimeShadow(perObjectLightIndex, positionWS);
     light.color = color;
 
@@ -157,12 +162,12 @@ Light GetAdditionalPerObjectLight(int perObjectLightIndex, float3 positionWS)
     // If the light is not baked, the channel is -1, and we need to apply no occlusion.
 
     // probeChannel is the index in 'unity_ProbesOcclusion' that holds the proper occlusion value.
-    int probeChannel = lightOcclusionProbeInfo.x;
+    light.probeChannel = lightOcclusionProbeInfo.x;
 
     // lightProbeContribution is set to 0 if we are indeed using a probe, otherwise set to 1.
     half lightProbeContribution = lightOcclusionProbeInfo.y;
 
-    half probeOcclusionValue = unity_ProbesOcclusion[probeChannel];
+    half probeOcclusionValue = unity_ProbesOcclusion[light.probeChannel];
     light.distanceAttenuation *= max(probeOcclusionValue, lightProbeContribution);
 #endif
 
@@ -579,7 +584,7 @@ half4 UniversalFragmentPBR(InputData inputData, half3 albedo, half metallic, hal
     Light mainLight = GetMainLight(inputData.shadowCoord);
 
 #if defined(LIGHTMAP_ON) && defined(_MIXED_LIGHTING_SHADOWMASK)
-    mainLight.shadowAttenuation = min(mainLight.shadowAttenuation, inputData.shadowmask.x);
+    mainLight.shadowAttenuation = min(mainLight.shadowAttenuation, inputData.shadowmask[mainLight.probeChannel]);
 #endif
     
     MixRealtimeAndBakedGI(mainLight, inputData.normalWS, inputData.bakedGI, half4(0, 0, 0, 0));
@@ -594,7 +599,7 @@ half4 UniversalFragmentPBR(InputData inputData, half3 albedo, half metallic, hal
         Light light = GetAdditionalLight(lightIndex, inputData.positionWS);
 
 #if defined(LIGHTMAP_ON) && defined(_MIXED_LIGHTING_SHADOWMASK)
-        light.shadowAttenuation = min(light.shadowAttenuation, inputData.shadowmask.x);
+        light.shadowAttenuation = min(light.shadowAttenuation, inputData.shadowmask[light.probeChannel]);
 #endif   
      
         color += LightingPhysicallyBased(brdfData, light, inputData.normalWS, inputData.viewDirectionWS);

@@ -13,6 +13,8 @@ namespace UnityEngine.Rendering.Universal.Internal
             public static int _MainLightPosition;
             public static int _MainLightColor;
 
+            public static int _MainLightOcclusionProbeChannel;
+
             public static int _AdditionalLightsCount;
             public static int _AdditionalLightsPosition;
             public static int _AdditionalLightsColor;
@@ -53,6 +55,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             LightConstantBuffer._MainLightPosition = Shader.PropertyToID("_MainLightPosition");
             LightConstantBuffer._MainLightColor = Shader.PropertyToID("_MainLightColor");
+            LightConstantBuffer._MainLightOcclusionProbeChannel = Shader.PropertyToID("_MainLightOcclusionProbes");
             LightConstantBuffer._AdditionalLightsCount = Shader.PropertyToID("_AdditionalLightsCount");
 
             if (m_UseStructuredBuffer)
@@ -228,6 +231,7 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             cmd.SetGlobalVector(LightConstantBuffer._MainLightPosition, lightPos);
             cmd.SetGlobalVector(LightConstantBuffer._MainLightColor, lightColor);
+            cmd.SetGlobalVector(LightConstantBuffer._MainLightOcclusionProbeChannel, lightOcclusionChannel);
         }
 
         void SetupAdditionalLightConstants(CommandBuffer cmd, ref RenderingData renderingData)
