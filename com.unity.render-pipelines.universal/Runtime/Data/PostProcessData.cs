@@ -59,6 +59,9 @@ namespace UnityEngine.Rendering.Universal
             [Reload("Shaders/PostProcessing/Bloom.shader")]
             public Shader bloomPS;
 
+            [Reload("Shaders/PostProcessing/PPv2Bloom.shader")]
+            public Shader ppv2bloomPS;
+
             [Reload("Shaders/PostProcessing/UberPost.shader")]
             public Shader uberPostPS;
 

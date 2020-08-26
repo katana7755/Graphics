@@ -392,5 +392,6 @@ namespace UnityEngine.Rendering.Universal
         PaniniProjection,
         UberPostProcess,
         Bloom,
+        PPv2Bloom,
     }
 }

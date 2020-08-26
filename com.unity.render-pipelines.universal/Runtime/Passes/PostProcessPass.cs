@@ -37,6 +37,7 @@ namespace UnityEngine.Rendering.Universal.Internal
         MotionBlur m_MotionBlur;
         PaniniProjection m_PaniniProjection;
         Bloom m_Bloom;
+        PPv2Bloom m_PPv2Bloom;
         LensDistortion m_LensDistortion;
         ChromaticAberration m_ChromaticAberration;
         Vignette m_Vignette;
@@ -169,6 +170,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             m_MotionBlur          = stack.GetComponent<MotionBlur>();
             m_PaniniProjection    = stack.GetComponent<PaniniProjection>();
             m_Bloom               = stack.GetComponent<Bloom>();
+            m_PPv2Bloom           = stack.GetComponent<PPv2Bloom>();
             m_LensDistortion      = stack.GetComponent<LensDistortion>();
             m_ChromaticAberration = stack.GetComponent<ChromaticAberration>();
             m_Vignette            = stack.GetComponent<Vignette>();
@@ -337,6 +339,14 @@ namespace UnityEngine.Rendering.Universal.Internal
                 {
                     using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.Bloom)))
                         SetupBloom(cmd, GetSource(), m_Materials.uber);
+                }
+
+                // PPv2 Bloom : URP's bloom is more dominant!!!
+                bool ppv2BloomActive = m_PPv2Bloom.IsActive();
+                if (!bloomActive && ppv2BloomActive) 
+                {
+                    using (new ProfilingScope(cmd, ProfilingSampler.Get(URPProfileId.PPv2Bloom)))
+                        SetupPPv2Bloom(cmd, GetSource(), m_Materials.uber);
                 }
 
                 // Setup other effects constants
@@ -903,6 +913,138 @@ namespace UnityEngine.Rendering.Universal.Internal
 
         #endregion
 
+        #region PPv2 Bloom
+
+        void SetupPPv2Bloom(CommandBuffer cmd, int source, Material uberMaterial)
+        {
+            // Negative anamorphic ratio values distort vertically - positive is horizontal
+            float ratio = Mathf.Clamp(m_PPv2Bloom.anamorphicRatio.value, -1f, 1f);
+            float rw = ratio < 0 ? -ratio : 0f;
+            float rh = ratio > 0 ?  ratio : 0f;
+
+            // Do bloom on a half-res buffer, full-res doesn't bring much and kills performances on
+            // fillrate limited platforms
+            int tw = Mathf.FloorToInt(m_Descriptor.width / (2f - rw));
+            int th = Mathf.FloorToInt(m_Descriptor.height / (2f - rh));
+
+            // Determine the iteration count
+            int maxSize = Mathf.Max(tw, th);
+            float logs = Mathf.Log(maxSize, 2f) - 1f;
+            int logs_i = Mathf.FloorToInt(logs);
+            int mipCount = Mathf.Clamp(logs_i, 1, m_PPv2Bloom.maxIteration.value);
+            float sampleScale = 0.5f + logs - logs_i;
+
+            // Pre-filtering parameters
+            float clamp = Mathf.GammaToLinearSpace(m_PPv2Bloom.clamp.value);
+            float threshold = Mathf.GammaToLinearSpace(m_PPv2Bloom.threshold.value);
+            float thresholdKnee = threshold * m_PPv2Bloom.softKnee.value;
+
+            // Material setup
+            var bloomMaterial = m_Materials.ppv2bloom;
+            bloomMaterial.SetFloat(ShaderConstants._SampleScale, sampleScale);
+            bloomMaterial.SetVector(ShaderConstants._Threshold, new Vector4(threshold, threshold - thresholdKnee, thresholdKnee * 2f, 0.25f / thresholdKnee));
+            bloomMaterial.SetVector(ShaderConstants._Params, new Vector4(clamp, 0f, 0f, 0f));
+
+            // Shader pass setup
+            int passPrefilter = (int)PPv2Bloom.Pass.Prefilter13;
+            int passDownsample = (int)PPv2Bloom.Pass.Downsample13;
+            int passUpsample = (int)PPv2Bloom.Pass.UpsampleTent;
+
+            if (m_PPv2Bloom.fastMode.value)
+            {
+                passPrefilter += 1;
+                passDownsample += 1;
+                passUpsample += 1;
+            }
+
+            // Prefilter
+            var desc = GetStereoCompatibleDescriptor(tw, th, m_DefaultHDRFormat);
+            cmd.GetTemporaryRT(ShaderConstants._BloomMipDown[0], desc, FilterMode.Bilinear);
+            cmd.GetTemporaryRT(ShaderConstants._BloomMipUp[0], desc, FilterMode.Bilinear);
+            cmd.Blit(source, ShaderConstants._BloomMipDown[0], bloomMaterial, passPrefilter);
+
+            // Downsample - gaussian pyramid
+            int lastDown = ShaderConstants._BloomMipDown[0];
+            for (int i = 1; i < mipCount; i++)
+            {
+                tw = Mathf.Max(1, tw >> 1);
+                th = Mathf.Max(1, th >> 1);
+                int mipDown = ShaderConstants._BloomMipDown[i];
+                int mipUp = ShaderConstants._BloomMipUp[i];
+
+                desc.width = tw;
+                desc.height = th;
+
+                cmd.GetTemporaryRT(mipDown, desc, FilterMode.Bilinear);
+                cmd.GetTemporaryRT(mipUp, desc, FilterMode.Bilinear);
+
+                cmd.Blit(lastDown, mipDown, bloomMaterial, passDownsample);
+                lastDown = mipDown;
+            }
+
+            // Upsample
+            int lastUp = ShaderConstants._BloomMipDown[mipCount - 1];
+            for (int i = mipCount - 2; i >= 0; i--)
+            {
+                int mipDown = ShaderConstants._BloomMipDown[i];
+                int mipUp = ShaderConstants._BloomMipUp[i];
+                cmd.SetGlobalTexture(ShaderConstants._BloomTex, mipDown);
+                cmd.Blit(lastUp, mipUp, bloomMaterial, passUpsample);
+                //cmd.Blit(lastUp, BlitDstDiscardContent(cmd, mipUp), bloomMaterial, passUpsample);
+                lastUp = mipUp;
+            }
+
+            // Cleanup
+            for (int i = 0; i < mipCount; i++)
+            {
+                cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipDown[i]);
+                if (i > 0) cmd.ReleaseTemporaryRT(ShaderConstants._BloomMipUp[i]);
+            }
+
+            // Setup bloom on uber
+            var tint = m_PPv2Bloom.color.value.linear;
+            var luma = ColorUtils.Luminance(tint);
+            tint = luma > 0f ? tint * (1f / luma) : Color.white;
+
+            var bloomParams = new Vector4(m_PPv2Bloom.intensity.value, tint.r, tint.g, tint.b);
+            uberMaterial.SetVector(ShaderConstants._Bloom_Params, bloomParams);
+            uberMaterial.SetFloat(ShaderConstants._Bloom_RGBM, m_UseRGBM ? 1f : 0f);
+
+            cmd.SetGlobalTexture(ShaderConstants._Bloom_Texture, ShaderConstants._BloomMipUp[0]);
+
+            // Setup lens dirtiness on uber
+            // Keep the aspect ratio correct & center the dirt texture, we don't want it to be
+            // stretched or squashed
+            var dirtTexture = m_PPv2Bloom.dirtTexture.value == null ? Texture2D.blackTexture : m_PPv2Bloom.dirtTexture.value;
+            float dirtRatio = dirtTexture.width / (float)dirtTexture.height;
+            float screenRatio = m_Descriptor.width / (float)m_Descriptor.height;
+            var dirtScaleOffset = new Vector4(1f, 1f, 0f, 0f);
+            float dirtIntensity = m_PPv2Bloom.dirtIntensity.value;
+
+            if (dirtRatio > screenRatio)
+            {
+                dirtScaleOffset.x = screenRatio / dirtRatio;
+                dirtScaleOffset.z = (1f - dirtScaleOffset.x) * 0.5f;
+            }
+            else if (screenRatio > dirtRatio)
+            {
+                dirtScaleOffset.y = dirtRatio / screenRatio;
+                dirtScaleOffset.w = (1f - dirtScaleOffset.y) * 0.5f;
+            }
+
+            uberMaterial.SetVector(ShaderConstants._LensDirt_Params, dirtScaleOffset);
+            uberMaterial.SetFloat(ShaderConstants._LensDirt_Intensity, dirtIntensity);
+            uberMaterial.SetTexture(ShaderConstants._LensDirt_Texture, dirtTexture);
+
+            // Keyword setup - a bit convoluted as we're trying to save some variants in Uber...
+            if (m_PPv2Bloom.highQualityFiltering.value)
+                uberMaterial.EnableKeyword(dirtIntensity > 0f ? ShaderKeywordStrings.BloomHQDirt : ShaderKeywordStrings.BloomHQ);
+            else
+                uberMaterial.EnableKeyword(dirtIntensity > 0f ? ShaderKeywordStrings.BloomLQDirt : ShaderKeywordStrings.BloomLQ);
+        }
+
+        #endregion
+
         #region Lens Distortion
 
         void SetupLensDistortion(Material material, bool isSceneView)
@@ -1100,6 +1242,7 @@ namespace UnityEngine.Rendering.Universal.Internal
             public readonly Material cameraMotionBlur;
             public readonly Material paniniProjection;
             public readonly Material bloom;
+            public readonly Material ppv2bloom;
             public readonly Material uber;
             public readonly Material finalPass;
 
@@ -1112,6 +1255,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 cameraMotionBlur = Load(data.shaders.cameraMotionBlurPS);
                 paniniProjection = Load(data.shaders.paniniProjectionPS);
                 bloom = Load(data.shaders.bloomPS);
+                ppv2bloom = Load(data.shaders.ppv2bloomPS);
                 uber = Load(data.shaders.uberPostPS);
                 finalPass = Load(data.shaders.finalPostPassPS);
             }
@@ -1140,6 +1284,7 @@ namespace UnityEngine.Rendering.Universal.Internal
                 CoreUtils.Destroy(cameraMotionBlur);
                 CoreUtils.Destroy(paniniProjection);
                 CoreUtils.Destroy(bloom);
+                CoreUtils.Destroy(ppv2bloom);
                 CoreUtils.Destroy(uber);
                 CoreUtils.Destroy(finalPass);
             }
@@ -1191,6 +1336,11 @@ namespace UnityEngine.Rendering.Universal.Internal
 
             public static int[] _BloomMipUp;
             public static int[] _BloomMipDown;
+
+            // For PPv2 Bloom
+            public static readonly int _SampleScale = Shader.PropertyToID("_SampleScale");
+            public static readonly int _Threshold = Shader.PropertyToID("_Threshold");
+            public static readonly int _BloomTex = Shader.PropertyToID("_BloomTex");
         }
 
         #endregion
